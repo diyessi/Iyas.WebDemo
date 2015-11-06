@@ -10,3 +10,4 @@
 /doc/*.log
 /target
 doc/*.gz
+/src/main/resources

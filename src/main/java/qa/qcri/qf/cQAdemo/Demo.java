@@ -38,17 +38,7 @@ public class Demo {
 			e.printStackTrace();
 			throw new IOException(e);
 		}
-	}
-
-	public Demo(Stopwords stoplist, String fileBasePath)  throws UIMAException, IOException {
-	  //this();
-	  this.featureMapper = new CommentSelectionDatasetCreator(stoplist);
-    this.model = new ModelTrainer();
-    this.qr = new QuestionRetriever();
-    //this.threadObjectBuilder = new LinkToQuestionObjectMapper();
-    this.threadObjectBuilder = new QatarLivingURLMapping(fileBasePath + "resources/");
-	}
-	
+	}	
 	
 	/**
 	 * Retrieve a set of threads, each one containing a candidate answer to the 
