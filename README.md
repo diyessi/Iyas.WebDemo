@@ -1,10 +1,11 @@
 # Iyas.WebDemo
 Web demo of Iyas CQA
 
-To build, you must first install Iyas.mini
+To build, you must first install Iyas.mini:
+```
 cd Iyas.mini
 mvn -Dmaven.test.skip=true install
-
+```
 Next put the models in Iyas.WebDemo as shown here:
 ```
 src/main/resources/
@@ -19,10 +20,11 @@ src/main/resources/qatarliving/questionInfo.map
 src/main/resources/qatarliving/urlMapping.map
 ```
 
-Then package the demo
+Then package the demo:
+```
 cd Iyas.WebDemo
 mvn -Dmaven.test.skip=true package
-
+```
 The .war file will be in target/WebDemo.war
 
 You will need to create a .ivy2 directory for the tomcat7 user.
