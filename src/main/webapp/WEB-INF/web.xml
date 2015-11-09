@@ -4,14 +4,27 @@
 
 <web-app>
   <display-name>Archetype Created Web Application</display-name>
+  <listener>
+  	<listener-class>qa.qcri.qf.cQAdemo.CQAdemoListener</listener-class>
+  </listener>
   <servlet>
   	<servlet-name>CQADemoApp</servlet-name>
   	<display-name>CQADemoApp</display-name>
   	<description></description>
   	<servlet-class>CQADemoApp</servlet-class>
   </servlet>
+  <servlet>
+  	<servlet-name>CQArelated</servlet-name>
+  	<display-name>CQArelated</display-name>
+  	<description>Returns related questions and ranked comments</description>
+  	<servlet-class>qa.qcri.qf.cQAdemo.CQArelated</servlet-class>
+  </servlet>
   <servlet-mapping>
   	<servlet-name>CQADemoApp</servlet-name>
   	<url-pattern>/CQADemoApp</url-pattern>
+  </servlet-mapping>
+  <servlet-mapping>
+  	<servlet-name>CQArelated</servlet-name>
+  	<url-pattern>/CQArelated</url-pattern>
   </servlet-mapping>
 </web-app>

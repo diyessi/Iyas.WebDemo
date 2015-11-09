@@ -7,14 +7,14 @@
 	<groupId>edu.mit.csail.sls</groupId>
 	<artifactId>WebDemo</artifactId>
 	<packaging>war</packaging>
-	<version>0.0.1-SNAPSHOT</version>
+	<version>0.0.2-SNAPSHOT</version>
 	<name>WebDemo Maven Webapp</name>
 	<url>http://maven.apache.org</url>
 	<dependencies>
 		<dependency>
 			<groupId>qa.qcri.qf</groupId>
 			<artifactId>qa.qcri.qf.pipeline</artifactId>
-			<version>0.0.1-SNAPSHOT</version>
+			<version>0.0.2-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>junit</groupId>
