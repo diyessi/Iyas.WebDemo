@@ -23,8 +23,8 @@ public class CQAdemoListener implements ServletContextListener {
 	
 	static private Demo demo;
 
-	static synchronized public List<CQAinstance> getQuestionAnswers(String userQuestion) throws UIMAException, IOException{
-		return demo.getQuestionAnswers(userQuestion);
+	static synchronized public List<CQAinstance> getQuestionAnswers(String userQuestion, int maxHits, int maxComments) throws UIMAException, IOException{
+		return demo.getQuestionAnswers(userQuestion, maxHits, maxComments);
 	}
 
     /**

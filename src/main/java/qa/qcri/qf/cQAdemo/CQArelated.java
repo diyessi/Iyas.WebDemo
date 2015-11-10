@@ -32,15 +32,27 @@ public class CQArelated extends HttpServlet {
         // TODO Auto-generated constructor stub
     }
 
-	/**
+    static int getParameterInt(HttpServletRequest request, String parameter, int defaultValue){
+    	String parameterValue = request.getParameter(parameter);
+    	try {
+    		return Integer.parseInt(parameterValue);
+    	} catch(NumberFormatException e){
+    		
+    	}
+    	return defaultValue;
+    }
+    
+    /**
 	 * @see HttpServlet#doGet(HttpServletRequest request, HttpServletResponse response)
 	 */
 	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
 		String jsonp = request.getParameter("jsonp");
 		String text = request.getParameter("text");
+		int maxHits = getParameterInt(request, "maxHits", 15);
+		int maxComments = getParameterInt(request, "maxComments", 20);
 		
 		try {
-			List<CQAinstance> threads = CQAdemoListener.getQuestionAnswers(text);
+			List<CQAinstance> threads = CQAdemoListener.getQuestionAnswers(text, maxHits, maxComments);
 			ObjectMapper objectMapper = new ObjectMapper();
 			response.setContentType("application/javascript");
 			PrintWriter writer = response.getWriter();

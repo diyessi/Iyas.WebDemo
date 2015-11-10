@@ -3,13 +3,17 @@ package qa.qcri.qf.cQAdemo;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.uima.UIMAException;
+import org.apache.uima.analysis_engine.AnalysisEngine;
+import org.apache.uima.analysis_engine.AnalysisEngineProcessException;
 import org.apache.uima.fit.pipeline.SimplePipeline;
 import org.apache.uima.jcas.JCas;
+import org.apache.uima.resource.ResourceInitializationException;
 
 import qa.qcri.qf.semeval2015_3.FeatureExtractor;
 import qa.qcri.qf.semeval2015_3.PairFeatureFactoryEnglish;
 import qa.qcri.qf.semeval2015_3.textnormalization.TextNormalizer;
 import qa.qcri.qf.trees.TreeSerializer;
+import qa.qf.qcri.cqa.CQAabstractElement;
 import qa.qf.qcri.cqa.CQAcomment;
 import qa.qf.qcri.cqa.CQAinstance;
 import util.Stopwords;
@@ -17,12 +21,22 @@ import cc.mallet.types.AugmentableFeatureVector;
 
 import com.google.common.base.Joiner;
 
+import de.tudarmstadt.ukp.dkpro.core.opennlp.OpenNlpChunker;
+import de.tudarmstadt.ukp.dkpro.core.opennlp.OpenNlpPosTagger;
+import de.tudarmstadt.ukp.dkpro.core.opennlp.OpenNlpSegmenter;
+import de.tudarmstadt.ukp.dkpro.core.stanfordnlp.StanfordLemmatizer;
 import de.tudarmstadt.ukp.similarity.algorithms.api.SimilarityException;
+
+import static org.apache.uima.fit.factory.AnalysisEngineFactory.createEngine;
+import static org.apache.uima.fit.factory.AnalysisEngineFactory.createEngineDescription;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Stack;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinTask;
 
 public class CommentSelectionDatasetCreator 
     extends qa.qcri.qf.emnlp2015.CommentSelectionDatasetCreatorV2{
@@ -129,14 +143,144 @@ public class CommentSelectionDatasetCreator
 //    return this.getCommentFeatureRepresentation(q, userQuestion);
 //  }
   
+  	class PipelineTask extends ForkJoinTask<Boolean> {
+  		JCas jCas;
+  		final AnalysisEngine[] analysisEngineList;
+  		
+  		PipelineTask() throws ResourceInitializationException{
+  			analysisEngineList = new AnalysisEngine[]{
+  	  				createEngine(createEngineDescription(OpenNlpSegmenter.class)),
+  	  			    createEngine(createEngineDescription(OpenNlpPosTagger.class)),
+  	  			    createEngine(createEngineDescription(OpenNlpChunker.class)),
+  	  			    createEngine(createEngineDescription(StanfordLemmatizer.class))
+  	  		};
+  		}
+
+		@Override
+		public Boolean getRawResult() {
+			return false;
+		}
+
+		@Override
+		protected void setRawResult(Boolean value) {
+		}
+
+		@Override
+		protected boolean exec() {
+			try {
+				SimplePipeline.runPipeline(jCas, analysisEngineList);
+				return true;
+			} catch (AnalysisEngineProcessException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				return false;
+			}
+		}
+
+		public JCas getJCas() {
+			return jCas;
+		}
+		
+		public void setJCas(JCas jCas){
+			this.jCas = jCas;
+			reinitialize();
+		}
+  	}
+  	
+  	class QuestionTask extends PipelineTask {
+  		CQAabstractElement question;
+  		
+  		QuestionTask() throws UIMAException{
+  			super();
+  		}
+  		
+  		public void setQuestion(CQAabstractElement question) throws UIMAException{
+  			setJCas(cqaElementToCas(question));
+  			this.question = question;
+  		}
+
+		public CQAabstractElement getQuestion() {
+			return question;
+		}
+  	}
+  	QuestionTask questionTask = new QuestionTask();
+  	List<Map<String, Double>> albertoSimoneFeatures;
+  	class CommentTask extends PipelineTask {
+  		CQAcomment comment;
+  		AugmentableFeatureVector fv;
+  		int commentIndex;
+  		
+  		CommentTask() throws UIMAException{
+  			super();
+  		}
+  		
+		@Override
+		protected boolean exec() {
+			super.exec();
+			System.out.println("Massimo features");
+			if (GENERATE_MASSIMO_FEATURES) {
+				synchronized (pfEnglish) {
+					fv = (AugmentableFeatureVector) pfEnglish.getPairFeatures(questionTask.getJCas(), jCas,
+							PARAMETER_LIST);
+				}
+			} else {
+				fv = new AugmentableFeatureVector(alphabet);
+			}
+			if (GENERATE_ALBERTO_AND_SIMONE_FEATURES) {
+				System.out.println("Alberto and Simone features");
+				Map<String, Double> featureVector = albertoSimoneFeatures.get(commentIndex);
+
+				for (String featureName : FeatureExtractor.getAllFeatureNames()) {
+					Double value = featureVector.get(featureName);
+					double featureValue = 0;
+					if (value != null) {
+						featureValue = value;
+					}
+					fv.add(featureName, featureValue);
+				}
+
+			}
+
+			return true;
+		}
+  		
+  		public void setComment(CQAcomment comment) throws UIMAException{
+  			setJCas(cqaElementToCas(comment));
+  			this.comment = comment;
+  		}
+  		
+		public CQAcomment getComment() {
+			return comment;
+		}
+
+		public AugmentableFeatureVector getFv() {
+			return fv;
+		}
+
+		public int getCommentIndex() {
+			return commentIndex;
+		}
+
+		public void setCommentIndex(int commentIndex) {
+			this.commentIndex = commentIndex;
+		}
+  	}
+  	Stack<CommentTask> commentTaskPool = new Stack<>();
+  	
+  	public CommentTask getCommentTask(CQAcomment comment, int commentIndex) throws UIMAException{
+  		CommentTask commentTask = commentTaskPool.isEmpty() ? new CommentTask() : commentTaskPool.pop();
+  		commentTask.setComment(comment);
+  		commentTask.setCommentIndex(commentIndex);
+  		return commentTask;
+  	}
+  	
+  	public void returnCommentTask(CommentTask commentTask){
+  		commentTaskPool.push(commentTask);
+  	}
+  
   //TODO This should be a List<List<Double>> as it contains all the features for the entire thread
   public List<List<Double>> getCommentFeatureRepresentation(CQAinstance thread) throws IOException, UIMAException {
-    //TODO confirm that getQbody is enough. Check how to get the question from a different place can be assigned
-    return this.getCommentFeatureRepresentation(thread, thread.getQuestion().getBody());
-  }
-  
-  //FIXME ABC, Sep 10. Gio: I still don't understand the reasoning behind this invocation. Let's discuss 
-  public List<List<Double>> getCommentFeatureRepresentation(CQAinstance thread, String userQuestion) throws IOException, UIMAException {
+	//String userQuestion = thread.getQuestion().getBody();
     
     //ArrayList<Double> featureMap = new ArrayList<Double>();
 
@@ -164,7 +308,7 @@ public class CommentSelectionDatasetCreator
      * Setup question CAS
      */
     System.out.println("Loading the cas");
-    JCas questionCas = cqaElementToCas(thread.getQuestion());
+    //JCas questionCas = cqaElementToCas(thread.getQuestion());
 //    this.questionCas.reset();
 //    this.questionCas.setDocumentLanguage("en");  
 //    //fm.writeLn(plainTextOutputPath, "---------------------------- QID: " + qid + " USER:" + quserid);
@@ -172,9 +316,12 @@ public class CommentSelectionDatasetCreator
 //    this.questionCas.setDocumentText(thread.getQuestion().getWholeTextNormalized(userProfiles));
 
     /** Run the UIMA pipeline */
-    System.out.println("Running the pipeline");
-    SimplePipeline.runPipeline(questionCas, this.analysisEngineList);
-    System.out.println("End of the pipeline");
+    questionTask.setQuestion(thread.getQuestion());
+    ForkJoinPool.commonPool().submit(questionTask);
+    JCas questionCas = questionTask.getJCas();
+
+    //SimplePipeline.runPipeline(questionCas, this.analysisEngineList);
+
     //this.analyzer.analyze(questionCas, new SimpleContent("q-" + qid, qsubject + ". " + qbody));
 
     /** Parse comment nodes */
@@ -189,21 +336,32 @@ public class CommentSelectionDatasetCreator
         comment.setGold(cgold);
       }
       //FIXME What do we normalize this for if we are not using it?
-      String csubject = TextNormalizer.normalize(comment.getSubject());
-      String cbody = TextNormalizer.normalize(comment.getBody());
+      //String csubject = TextNormalizer.normalize(comment.getSubject());
+      //String cbody = TextNormalizer.normalize(comment.getBody());
     }
 
    
-    List<Map<String, Double>> albertoSimoneFeatures;
+    
     if (GENERATE_ALBERTO_AND_SIMONE_FEATURES){
       albertoSimoneFeatures = FeatureExtractor.extractFeatures(thread);
     }
 
-    int commentIndex = 0;
     List<JCas> allCommentsCas = new ArrayList<JCas>();
-    
+    List<CommentTask> commentTasks = new ArrayList<>();
+
+    questionTask.join();
+    System.out.println("Question pipeline complete");
+
+    int commentIndex = 0;
     for (CQAcomment comment : thread.getComments()) {
-      JCas commentCas = cqaElementToCas(comment);
+    	CommentTask commentTask = getCommentTask(comment, commentIndex++);
+    	commentTasks.add(commentTask);
+    	ForkJoinPool.commonPool().submit(commentTask);
+    }
+    
+    for (CommentTask commentTask : commentTasks) {
+      JCas commentCas = commentTask.getJCas();
+      CQAcomment comment = commentTask.getComment();
 //      String cid = comment.getId();
 //      String cuserid = comment.getUserId();
 //      String cgold = comment.getGold();
@@ -220,18 +378,24 @@ public class CommentSelectionDatasetCreator
       /**
        * Run the UIMA pipeline
        */
-      SimplePipeline.runPipeline(commentCas, this.analysisEngineList);
+      commentTask.join();
+      System.out.println("Comment pipeline complete");
+      //SimplePipeline.runPipeline(commentCas, this.analysisEngineList);
       //this.analyzer.analyze(commentCas, new SimpleContent("c-" + cid, csubject + ". " + cbody));
 
       System.out.println("Massimo features");
       AugmentableFeatureVector fv;
+      /*
       if (GENERATE_MASSIMO_FEATURES){
         fv = (AugmentableFeatureVector) pfEnglish.getPairFeatures(questionCas, commentCas, PARAMETER_LIST);
       } else {
         fv = new AugmentableFeatureVector(this.alphabet);
       }
-      System.out.println("Alberto and Simone features");
+      */
+      
+      /*
       if (GENERATE_ALBERTO_AND_SIMONE_FEATURES){
+          System.out.println("Alberto and Simone features");
         Map<String, Double> featureVector = albertoSimoneFeatures.get(commentIndex);
         
         for (String featureName : FeatureExtractor.getAllFeatureNames()){
@@ -245,6 +409,8 @@ public class CommentSelectionDatasetCreator
 
       }
       commentIndex++;
+      */
+      fv = commentTask.getFv();
 
       /***************************************
        * * * * PLUG YOUR FEATURES HERE * * * *
@@ -278,8 +444,8 @@ public class CommentSelectionDatasetCreator
   
       List<Double> features = this.serializeFv(fv);
       listFeatures.add(features);
-      System.out.println("Writing features to file");
       if (WRITE_FEATURES_TO_FILE) {
+          System.out.println("Writing features to file");
         this.writeFeaturesToFile(fv, questionCas, commentCas, 
             thread.getQuestion().getId(), comment.getId(), comment.getGold(), comment.getGold_yn());
             //qid, cid, cgold, cgold_yn);
@@ -288,6 +454,7 @@ public class CommentSelectionDatasetCreator
        * Produce also the file needed to train structural models
        */     
       allCommentsCas.add(commentCas);
+      returnCommentTask(commentTask);
     }
     
     if (WRITE_FEATURES_TO_FILE) {

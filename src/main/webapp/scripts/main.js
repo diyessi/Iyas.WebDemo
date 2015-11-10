@@ -4,14 +4,14 @@ $(document).ready(function(){
 	$("textEntry").focus();
 
 	$("#textEntrySubmit").click (function () {
-		tag($("#textEntry").val());
+		showRelated($("#textEntry").val());
 	});
 
 	$("#textEntry").keypress(function(event) {
 	    if (event.which == 13) {
 	        event.preventDefault();
 	        var sentence = $("#textEntry").val();
-	        tag(sentence);
+	        showRelated(sentence);
 	        
 	        // clear the input textbox
 	        $("#textEntry").val("");
@@ -19,8 +19,9 @@ $(document).ready(function(){
 	    }
 	});
 
-	function tag(text){
-	    $.getJSON('CQArelated'+'?jsonp=?', {'text' : text},
+	function showRelated(text){
+		$("#resultArea").html("<h1>Computing...</h1>");
+	    $.getJSON('CQArelated'+'?jsonp=?', {'text' : text, 'maxHits' : 5, 'maxComments' : 10},
 		      function(items){
 	    		console.log("got related questions");
 	    		console.log(items);
@@ -36,6 +37,9 @@ $(document).ready(function(){
 	    	    	$("#resultArea").append(item.question.body+"<p>");
 	    	    	for(var j=0; j<comments.length; j++){
 	    	    		var comment = comments[j];
+	    	    		if (comment.score == -1000){
+	    	    			break;
+	    	    		}
 	    	    		$("#resultArea").append(comment.score+"<br>");
 	    	    		$("#resultArea").append(comment.wholeText+"<p>");
 	    	    	}

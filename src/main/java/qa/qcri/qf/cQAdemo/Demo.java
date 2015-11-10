@@ -11,16 +11,12 @@ import org.apache.uima.UIMAException;
 import edu.stanford.nlp.util.StringUtils;
 import qa.qf.qcri.cqa.CQAcomment;
 import qa.qf.qcri.cqa.CQAinstance;
-import util.Stopwords;
 
 public class Demo {
 
 	private static String MODEL_FILE_NAME = "/data/"
 			+ "SemEval2015-Task3-English-data/datasets/emnlp15/" 
 			+ "CQA-QL-train.xml.klp.model";
-
-	private final int MAX_HITS =15;
-	private final int MAX_COMMENTS=20;
 	
 	private CommentSelectionDatasetCreator featureMapper; 
 	private ModelTrainer model;
@@ -49,12 +45,12 @@ public class Demo {
 	 * containing a candidate answer 
 	 * @throws IOException 
 	 */
-	private List<CQAinstance> retrieveCandidateAnswers(String userQuestion) 
+	private List<CQAinstance> retrieveCandidateAnswers(String userQuestion, int maxHits) 
 			throws IOException {
 		
 		List<CQAinstance> candidateAnswers;
 		System.out.println("Retreving candidate threads");	
-		candidateAnswers = threadObjectBuilder.getQuestions(qr.getLinks(userQuestion, MAX_HITS));
+		candidateAnswers = threadObjectBuilder.getQuestions(qr.getLinks(userQuestion, maxHits));
 		if (candidateAnswers.size()==0) {
 			System.out.println("No similar questions were found in QatarLiving");
 			//System.exit(0); //TODO delete this line if possible
@@ -71,33 +67,35 @@ public class Demo {
 	 * @throws UIMAException
 	 * @throws IOException
 	 */
-	public List<CQAinstance> getQuestionAnswers(String userQuestion) 
+	public List<CQAinstance> getQuestionAnswers(String userQuestion, int maxHits, int maxComments)
 			throws UIMAException, IOException {
 		List<List<Double>> threadFeatures = new ArrayList<List<Double>>();
 		List<CQAinstance> threads;
 		float score;
 		int counter;
-		
-		threads = retrieveCandidateAnswers(userQuestion);
+
+		threads = retrieveCandidateAnswers(userQuestion, maxHits);
 		System.out.format("Candidate threads: %s%n", threads.size());
-		for(CQAinstance thread : threads) {
-		  System.out.format("Processing question %s%n", thread.getQuestion().getId());
-		  CQAinstance smallThread = new CQAinstance(thread.getQuestion(), thread.getQuestion().getId());
-		  counter = 0;
-		  for (CQAcomment com : thread.getComments()) {
-		    if (counter++ > MAX_COMMENTS) {
-		      break;
-		    }
-		    System.out.format("\tGrabbing comment %s%n", com.getId());
-		    smallThread.addComment(com);
-		  }
-		  //threadFeatures = featureMapper.getCommentFeatureRepresentation(thread);
-		  System.out.println("Computing comment feature representation");
+		for (CQAinstance thread : threads) {
+			System.out.format("Processing question %s%n", thread.getQuestion().getId());
+			CQAinstance smallThread = new CQAinstance(thread.getQuestion(), thread.getQuestion().getId());
+			counter = 0;
+			for (CQAcomment com : thread.getComments()) {
+				if (counter++ <= maxComments) {
+					System.out.format("\tGrabbing comment %s%n", com.getId());
+					smallThread.addComment(com);
+				} else {
+					com.setPrediction("", -1000.0);
+				}
+			}
+			// threadFeatures =
+			// featureMapper.getCommentFeatureRepresentation(thread);
+			System.out.println("Computing comment feature representation");
 			threadFeatures = featureMapper.getCommentFeatureRepresentation(smallThread);
-			for (int i=0; i<smallThread.getNumberOfComments(); i++) {
-			  System.out.format("\tGetting score for comment %d%n", i);
+			for (int i = 0; i < smallThread.getNumberOfComments(); i++) {
+				System.out.format("\tGetting score for comment %d%n", i);
 				score = model.getExampleScoreFromFeatureVector(threadFeatures.get(i));
-				smallThread.getComment(i).setPrediction("", score); 
+				smallThread.getComment(i).setPrediction("", score);
 			}
 		}
 		System.out.format("Related questions retrieved: %d%n", threads.size());
@@ -133,7 +131,7 @@ public class Demo {
 		}
 		System.out.println("Processing question: " + userQuestion);
 		
-		List<CQAinstance> threads = demo.getQuestionAnswers(userQuestion);
+		List<CQAinstance> threads = demo.getQuestionAnswers(userQuestion, 15, 20);
 
 		OutputVisualization out = new OutputVisualization(threads);
 		System.out.println("User Question: " + userQuestion);
