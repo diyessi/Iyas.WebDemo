@@ -5,6 +5,7 @@ import org.apache.log4j.Logger;
 import org.apache.uima.UIMAException;
 import org.apache.uima.analysis_engine.AnalysisEngine;
 import org.apache.uima.analysis_engine.AnalysisEngineProcessException;
+import org.apache.uima.fit.factory.JCasFactory;
 import org.apache.uima.fit.pipeline.SimplePipeline;
 import org.apache.uima.jcas.JCas;
 import org.apache.uima.resource.ResourceInitializationException;
@@ -144,10 +145,11 @@ public class CommentSelectionDatasetCreator
 //  }
   
   	class PipelineTask extends ForkJoinTask<Boolean> {
-  		JCas jCas;
+  		final JCas jCas;
   		final AnalysisEngine[] analysisEngineList;
   		
-  		PipelineTask() throws ResourceInitializationException{
+  		PipelineTask() throws UIMAException{
+		    jCas = JCasFactory.createJCas();
   			analysisEngineList = new AnalysisEngine[]{
   	  				createEngine(createEngineDescription(OpenNlpSegmenter.class)),
   	  			    createEngine(createEngineDescription(OpenNlpPosTagger.class)),
@@ -178,11 +180,14 @@ public class CommentSelectionDatasetCreator
 		}
 
 		public JCas getJCas() {
+			join();
 			return jCas;
 		}
 		
-		public void setJCas(JCas jCas){
-			this.jCas = jCas;
+		public void setElement(CQAabstractElement element) throws UIMAException{
+			jCas.reset();
+		    jCas.setDocumentLanguage("en");
+		    jCas.setDocumentText(element.getWholeText());
 			reinitialize();
 		}
   	}
@@ -195,7 +200,7 @@ public class CommentSelectionDatasetCreator
   		}
   		
   		public void setQuestion(CQAabstractElement question) throws UIMAException{
-  			setJCas(cqaElementToCas(question));
+  			setElement(question);
   			this.question = question;
   		}
 
@@ -245,7 +250,7 @@ public class CommentSelectionDatasetCreator
 		}
   		
   		public void setComment(CQAcomment comment) throws UIMAException{
-  			setJCas(cqaElementToCas(comment));
+  			setElement(comment);
   			this.comment = comment;
   		}
   		
@@ -254,6 +259,7 @@ public class CommentSelectionDatasetCreator
 		}
 
 		public AugmentableFeatureVector getFv() {
+			join();
 			return fv;
 		}
 
@@ -318,7 +324,6 @@ public class CommentSelectionDatasetCreator
     /** Run the UIMA pipeline */
     questionTask.setQuestion(thread.getQuestion());
     ForkJoinPool.commonPool().submit(questionTask);
-    JCas questionCas = questionTask.getJCas();
 
     //SimplePipeline.runPipeline(questionCas, this.analysisEngineList);
 
@@ -360,7 +365,6 @@ public class CommentSelectionDatasetCreator
     }
     
     for (CommentTask commentTask : commentTasks) {
-      JCas commentCas = commentTask.getJCas();
       CQAcomment comment = commentTask.getComment();
 //      String cid = comment.getId();
 //      String cuserid = comment.getUserId();
@@ -444,6 +448,8 @@ public class CommentSelectionDatasetCreator
   
       List<Double> features = this.serializeFv(fv);
       listFeatures.add(features);
+      JCas commentCas = commentTask.getJCas();
+      JCas questionCas = questionTask.getJCas();
       if (WRITE_FEATURES_TO_FILE) {
           System.out.println("Writing features to file");
         this.writeFeaturesToFile(fv, questionCas, commentCas, 

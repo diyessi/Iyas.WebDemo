@@ -21,7 +21,7 @@ $(document).ready(function(){
 
 	function showRelated(text){
 		$("#resultArea").html("<h1>Computing...</h1>");
-	    $.getJSON('CQArelated'+'?jsonp=?', {'text' : text, 'maxHits' : 5, 'maxComments' : 10},
+	    $.getJSON('CQArelated'+'?jsonp=?', {'text' : text, 'maxHits' : 10, 'maxComments' : 10},
 		      function(items){
 	    		console.log("got related questions");
 	    		console.log(items);
